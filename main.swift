@@ -355,3 +355,13 @@ let delegate = AppDelegate()
 app.delegate = delegate
 app.setActivationPolicy(.accessory)
 app.run()
+
+// для сборки проекта app
+// swiftc main.swift -o "SmartSwitcher" -framework AppKit -framework Carbon
+// mkdir -p "SmartSwitcher.app/Contents/MacOS"
+// mv "SmartSwitcher" "SmartSwitcher.app/Contents/MacOS/SmartSwitcher"
+
+// для сборки проекта бинарника
+// swiftc -O main.swift -o SmartSwitcher -framework AppKit -framework Carbon -framework CoreGraphics -framework ApplicationServices
+запустить бинарник
+// ./SmartSwitcher

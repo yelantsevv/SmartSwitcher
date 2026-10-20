@@ -104,15 +104,13 @@ class TextConverterEngine {
             return
         }
 
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         eventTap = tap
         runLoopSource = source
 
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
         isEnabled = true
-
-        print("🚀 SmartSwitcher включён.")
     }
 
     func stop() {
@@ -129,16 +127,10 @@ class TextConverterEngine {
         eventTap = nil
         runLoopSource = nil
         isEnabled = false
-
-        print("⏸ SmartSwitcher выключен.")
     }
 
     func toggle() {
-        if isEnabled {
-            stop()
-        } else {
-            start()
-        }
+        if isEnabled { stop() } else { start() }
     }
 
     fileprivate func handle(event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -146,14 +138,16 @@ class TextConverterEngine {
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
-        let fnMask: CGEventFlags = CGEventFlags(rawValue: UInt64(0x800000) | CGEventFlags.maskNonCoalesced.rawValue)
 
-        if keyCode == 49 && (flags.contains(.maskSecondaryFn) || flags.contains(fnMask) || (flags.rawValue & 0x800000) != 0) {
+        // Код 49 — это Пробел. Проверяем нажатие Fn (маска флага Fn в macOS)
+        let isFnPressed = flags.contains(.maskSecondaryFn) || (flags.rawValue & 0x800000) != 0
+
+        if keyCode == 49 && isFnPressed {
             isProcessing = true
             
-            DispatchQueue.global().async {
+            DispatchQueue.global(qos: .userInitiated).async {
                 self.handleFnSpace()
-                Thread.sleep(forTimeInterval: 0.1)
+                Thread.sleep(forTimeInterval: 0.05)
                 self.isProcessing = false
             }
             
@@ -170,6 +164,7 @@ class TextConverterEngine {
 
         let src = CGEventSource(stateID: .hidSystemState)
 
+        // Имитация Cmd + C через CGEvent
         let cmdDown = CGEvent(keyboardEventSource: src, virtualKey: 55, keyDown: true)
         let cDown = CGEvent(keyboardEventSource: src, virtualKey: 8, keyDown: true)
         let cUp = CGEvent(keyboardEventSource: src, virtualKey: 8, keyDown: false)
@@ -179,15 +174,15 @@ class TextConverterEngine {
         cUp?.flags = .maskCommand
 
         cmdDown?.post(tap: .cghidEventTap)
-        usleep(10000)
+        usleep(12000)
         cDown?.post(tap: .cghidEventTap)
-        usleep(10000)
+        usleep(12000)
         cUp?.post(tap: .cghidEventTap)
-        usleep(10000)
+        usleep(12000)
         cmdUp?.post(tap: .cghidEventTap)
 
         var attempts = 0
-        while pasteboard.changeCount == oldChangeCount && attempts < 8 {
+        while pasteboard.changeCount == oldChangeCount && attempts < 10 {
             usleep(10000)
             attempts += 1
         }
@@ -202,6 +197,7 @@ class TextConverterEngine {
             pasteboard.clearContents()
             pasteboard.setString(convertedText, forType: .string)
 
+            // Имитация Cmd + V
             let vCmdDown = CGEvent(keyboardEventSource: src, virtualKey: 55, keyDown: true)
             let vDown = CGEvent(keyboardEventSource: src, virtualKey: 9, keyDown: true)
             let vUp = CGEvent(keyboardEventSource: src, virtualKey: 9, keyDown: false)
@@ -211,17 +207,17 @@ class TextConverterEngine {
             vUp?.flags = .maskCommand
 
             vCmdDown?.post(tap: .cghidEventTap)
-            usleep(10000)
+            usleep(12000)
             vDown?.post(tap: .cghidEventTap)
-            usleep(10000)
+            usleep(12000)
             vUp?.post(tap: .cghidEventTap)
-            usleep(10000)
+            usleep(12000)
             vCmdUp?.post(tap: .cghidEventTap)
 
-            usleep(20000)
-
+            usleep(30000)
             InputSourceManager.switchToLanguage(russian: targetIsRussian)
         } else {
+            // Если текст не выделен, просто шлем обычный пробел
             let spaceDown = CGEvent(keyboardEventSource: src, virtualKey: 49, keyDown: true)
             let spaceUp = CGEvent(keyboardEventSource: src, virtualKey: 49, keyDown: false)
             spaceDown?.post(tap: .cghidEventTap)
@@ -230,7 +226,7 @@ class TextConverterEngine {
         }
 
         DispatchQueue.global().async {
-            sleep(1)
+            usleep(500000) // 0.5 сек перед возвратом старого буфера
             if let oldString {
                 pasteboard.clearContents()
                 pasteboard.setString(oldString, forType: .string)
@@ -252,14 +248,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         
-        // 1. Кнопка вкл/выкл
         functionMenuItem = NSMenuItem(title: "", action: #selector(toggleFunction), keyEquivalent: "")
         functionMenuItem?.target = self
         menu.addItem(functionMenuItem!)
 
         menu.addItem(NSMenuItem.separator())
         
-        // 2. Кнопки выбора языка
         englishMenuItem = NSMenuItem(title: "Английский (US)", action: #selector(selectEnglish), keyEquivalent: "")
         englishMenuItem?.target = self
         menu.addItem(englishMenuItem!)
@@ -270,21 +264,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
         
-        // 3. Информационная строка
         let infoItem = NSMenuItem(title: "Fn + Space: конвертация выделенного", action: #selector(dummyAction), keyEquivalent: "")
         infoItem.target = self
         menu.addItem(infoItem)
 
         menu.addItem(NSMenuItem.separator())
         
-        // 4. Открыть настройки клавиатуры
         let settingsItem = NSMenuItem(title: "Открыть настройки клавиатуры", action: #selector(openKeyboardSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        // 5. Завершить
         let quitItem = NSMenuItem(title: "Завершить", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -301,7 +292,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         updateUIState()
 
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        // Увеличен интервал таймера с 0.5 до 2.0 секунд, чтобы разгрузить процессор
+        timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.updateUIState()
         }
     }
@@ -319,7 +311,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.button?.title = enabled ? " \(langCode)" : " OFF (\(langCode))"
         statusItem?.button?.imagePosition = .imageLeft
 
-        // Отмечаем галочкой активный язык в меню
         if langCode == "RU" {
             russianMenuItem?.state = .on
             englishMenuItem?.state = .off
